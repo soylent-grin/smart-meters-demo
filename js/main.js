@@ -8,14 +8,62 @@
 		return this.replace(pattern, function(capture){ return args[capture.match(/\d+/)]; });
 	};
 	var test_data = [
-		[59.986840,29.781766],
-		[59.989259,29.79150],
-		[59.990384,29.789364],
-		[59.990169,29.786172],
-		[59.990760,29.780937],
-		[59.988890,29.785052],
-		[59.987449,29.784129],
-		[59.988965,29.792154]
+		{
+			lat_lng: [59.986840,29.781766],
+			overheat: 0.5,
+			outside_t: 6,
+			inside_t: 80,
+			consumed: 100
+		},
+		{
+			lat_lng: [59.989259,29.791500],
+			overheat: 0.5,
+			outside_t: 6,
+			inside_t: 80,
+			consumed: 100
+		},
+		{
+			lat_lng: [59.990384,29.789364],
+			overheat: 0.5,
+			outside_t: 6,
+			inside_t: 80,
+			consumed: 100
+		},
+		{
+			lat_lng: [59.990169,29.786172],
+			overheat: 0.5,
+			outside_t: 6,
+			inside_t: 80,
+			consumed: 100
+		},
+		{
+			lat_lng: [59.990760,29.780937],
+			overheat: 0.5,
+			outside_t: 6,
+			inside_t: 80,
+			consumed: 100
+		},
+		{
+			lat_lng: [59.988890,29.785052],
+			overheat: 0.5,
+			outside_t: 6,
+			inside_t: 80,
+			consumed: 100
+		},
+		{
+			lat_lng: [59.987449,29.784129],
+			overheat: 0.5,
+			outside_t: 6,
+			inside_t: 80,
+			consumed: 100
+		},
+		{
+			lat_lng: [59.988965,29.792154],
+			overheat: 0.5,
+			outside_t: 6,
+			inside_t: 80,
+			consumed: 100
+		}
 	]
 
 	var SmartMetersMap = function() {
@@ -44,16 +92,38 @@
 			};
 		},
 		update: function(data) {
-			this.layers.heat.setLatLngs(data);
+			var array = [], tmp_array = [];
+			data.forEach(function(building) {
+				tmp_array = building.lat_lng.slice(0);
+				tmp_array.push(building.overheat);
+				array.push(tmp_array);
+			});
+			this.layers.heat.setLatLngs(array);
 			this.layers.heat.redraw();
 		},
 		set_view: function(lat_lng) {
 			this.map.setView(lat_lng);
+		},
+		show_popup: function(data) {
+			L.popup()
+				.setLatLng(data.lat_lng)
+				.setContent(this.get_popup_content(data))
+				.openOn(this.map);
+		},
+		get_popup_content: function(data) {
+			var $container = $("<div>");
+			$container.append($("<label class='address'>{0}</label>".format(data.address)));
+			$container.append($("<label>Перетоп: <span>{0}</span></label>".format(data.overheat > 0.5 ? data.overheat.toFixed(2) : "нет")));
+			$container.append($("<label>Температура снаружи, С: <span>{0}</span></label>".format(data.outside_t)));
+			$container.append($("<label>Температура внутри, С: <span>{0}</span></label>".format(data.inside_t)));
+			$container.append($("<label>Текущее потребление: <span>{0}</span></label>".format(data.consumed)));
+			return $container.html();
 		}
 	};
 
 	var SmartMetersApp = function() {
 		this.overheat_rate = 0.5;
+		this.outside_t = 2;
 		this.init();
 	};
 	SmartMetersApp.prototype = {
@@ -69,20 +139,20 @@
 			var template = $(".building-item.template").clone(true).removeClass('template');
 			var geocoder = new google.maps.Geocoder();
 			var g_lat_lng, $el, address;
-			this.data.forEach(function(lat_lng, i) {
+			this.data.forEach(function(building, i) {
 				setTimeout(function() {
-					g_lat_lng = new google.maps.LatLng(lat_lng[0], lat_lng[1]);
+					g_lat_lng = new google.maps.LatLng(building.lat_lng[0], building.lat_lng[1]);
 					geocoder.geocode({'latLng': g_lat_lng}, function(results, status) {
 						console.log(status);
 						if (status == google.maps.GeocoderStatus.OK) {
 							address = results[0].address_components[1].long_name + ", " + results[0].address_components[0].long_name;
+							building.address = address;
 							$el = template.clone(true);
 							$el.find('.address').text(address);
 							$el.attr({
-								'data-lat': lat_lng[0],
-								'data-lng': lat_lng[1],
-								'data-overheat': 0
-							});
+								'data-lat': building.lat_lng[0],
+								'data-lng': building.lat_lng[1]
+							}).data('building_info', building);
 							$el.appendTo('#overheat-info > ul');
 						} 
 					});
@@ -92,32 +162,35 @@
 		add_event_listeners: function() {
 			var that = this;
 			$('#overheat-info').on('click', '.building-item', function() {
-				var lat_lng = [ $(this).attr('data-lat'), $(this).attr('data-lng') ];
-				that.map.set_view(lat_lng);
+				$(this).addClass('active').siblings('.active').removeClass('active');
+				that.map.show_popup($(this).data('building_info'));
 			});
 		},
 		update_aside: function(data) {
 			var $el, overheat;
 			var that = this;
-			data.forEach(function(lat_lng) {
-				$el = $('.building-item[data-lat="{0}"][data-lng="{1}"]'.format(lat_lng[0], lat_lng[1]));
+			data.forEach(function(building) {
+				$el = $('.building-item[data-lat="{0}"][data-lng="{1}"]'.format(building.lat_lng[0], building.lat_lng[1]));
 				if ($el.length > 0) {
-					overheat = lat_lng[2].toFixed(2);	
+					overheat = building.overheat.toFixed(2);	
 					if (overheat > that.overheat_rate) {
 						$el.find('.overheat').text(overheat);
 						$el.css({
-							'background-color': 'rgba(255,0,0,{0})'.format(lat_lng[2] * 0.25)
+							'background-color': 'rgba(255,0,0,{0})'.format(building.overheat * 0.25)
 						});
 					} else {
 						$el.find('.overheat').text('нет');
 						$el.removeAttr('style');
 					}
 				}
+				if ($el.hasClass('active')) {
+					$el.click();
+				}
 			});
 		},
 		get_data: function(callback) {
 			var that = this;
-			this.data = this.set_random_intense(test_data);
+			this.data = this.set_random_params(test_data);
 			this.map.update(this.data);
 			this.update_aside(this.data);
 			/*
@@ -127,9 +200,14 @@
 			});
 			*/
 		},
-		set_random_intense: function(data) {
-			data.forEach(function(lat_lng) {
-				lat_lng[2] = Math.random();
+		set_random_params: function(data) {
+			var that = this;
+			data.forEach(function(building) {
+				var new_overheat = Math.random();
+				building.overheat = new_overheat ;//< building.overheat ?  building.overheat : new_overheat;
+				building.inside_t = Math.floor(Math.random() * 60) + 50;
+				building.outside_t = Math.floor(Math.random() * 2 - 4 ) + that.outside_t;
+				building.consumed +=  Math.floor(Math.random() * 5);
 			});
 			return data;
 		},

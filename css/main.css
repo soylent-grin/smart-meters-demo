@@ -54,12 +54,12 @@ body {
 #overheat-info > ul > li:hover span {
 	font-weight: bold;
 }
-#overheat-info label {
+ label {
 	display: block;
 	margin-bottom: 0;
 	cursor: pointer;
 }
-#overheat-info label > span {
+label > span {
 	font-weight: normal;
 	cursor: pointer;
 }
