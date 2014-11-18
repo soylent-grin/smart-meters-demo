@@ -64,7 +64,50 @@
 			inside_t: 80,
 			consumed: 100
 		}
-	]
+	];
+
+	var ColorHelper = {
+		component_to_hex: function(c) {
+		    var hex = c.toString(16);
+		    return hex.length == 1 ? "0" + hex : hex;
+		},
+		rgb_to_hex: function(r, g, b) {
+		    return "#" + ColorHelper.component_to_hex(r) + ColorHelper.component_to_hex(g) + ColorHelper.component_to_hex(b);
+		},
+		hex_to_rgb: function(hex) {
+			// Expand shorthand form (e.g. "03F") to full form (e.g. "0033FF")
+		    var shorthandRegex = /^#?([a-f\d])([a-f\d])([a-f\d])$/i;
+		    hex = hex.replace(shorthandRegex, function(m, r, g, b) {
+		        return r + r + g + g + b + b;
+		    });
+
+		    var result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+		    return result ? {
+		        r: parseInt(result[1], 16),
+		        g: parseInt(result[2], 16),
+		        b: parseInt(result[3], 16)
+		    } : null;
+		},
+		get_gradient_color: function(color1, color2, percent) {
+			if (typeof(color1) === 'string') {
+				color1 = ColorHelper.hex_to_rgb(color1);
+			}
+			if (typeof(color2) === 'string') {
+				color2 = ColorHelper.hex_to_rgb(color2);
+			}
+			var newColor = {};
+
+		    function makeChannel(a, b) {
+		        return(a + Math.round((b-a)*(percent/100)));
+		    }
+
+		    newColor.r = makeChannel(color1.r, color2.r);
+		    newColor.g = makeChannel(color1.g, color2.g);
+		    newColor.b = makeChannel(color1.b, color2.b);
+
+		    return(ColorHelper.rgb_to_hex(newColor.r, newColor.g, newColor.b));
+		}
+	};
 
 	var SmartMetersMap = function() {
 		this.init();
@@ -90,6 +133,21 @@
 					max: 1
 				}).addTo(this.map)
 			};
+			var osmb = new OSMBuildings(this.map);
+			osmb.each(function(feature) {				
+				feature.properties.material = undefined;
+				feature.properties.roofMaterial = undefined;
+
+				var rand = Math.random();
+				if (rand > 0.5) {
+					var color = ColorHelper.get_gradient_color("#fff5ef", "#ff5200", Math.random() * 100);
+				} else {
+					var color = ColorHelper.get_gradient_color("#9bb2ff", "#fff5ef", Math.random() * 100);
+				}
+				feature.properties.wallColor = color;
+				feature.properties.roofColor = color;
+			});
+			osmb.load();
 		},
 		update: function(data) {
 			var array = [], tmp_array = [];
