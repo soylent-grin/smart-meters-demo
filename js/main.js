@@ -238,18 +238,20 @@ var a = (function($) {
 		add_event_listeners: function() {
 			var that = this;
 			this.map.on('popupclose', function() {
-				$('.building-item.active').removeClass('active');
+				//$('.building-item.active').removeClass('active');
 			});
 			$('.main-toolbar').on('click', '.btn', function() {
 				$(this).addClass('active').siblings().removeClass('active');
 				if ($(this).hasClass('overheat')) {
 					that.map.addLayer(that.layers.heat);
 					that.map.removeLayer(that.layers.buildings);
-					$('#main-wrapper').addClass('overheat')
+					$('#main-wrapper').addClass('overheat');
 				} else if ($(this).hasClass('temp')) {
 					that.map.removeLayer(that.layers.heat);
 					that.map.addLayer(that.layers.buildings);
-					$('#main-wrapper').removeClass('overheat')
+					$('#main-wrapper').removeClass('overheat');
+					that.map.closePopup();
+					$('.building-item.active').removeClass('active');
 				}
 			});
 		},
