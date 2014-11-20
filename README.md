@@ -3,6 +3,6 @@ Smart Meters Demo
 
 To start application, run
 
-	nodejs server
+	node server
 
-and check localhost:3300
+and check localhost:3300.
