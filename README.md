@@ -1,7 +1,7 @@
 Smart Meters Demo
 =============
 
-To stare application, run
+To start application, run
 
 	nodejs server
 
