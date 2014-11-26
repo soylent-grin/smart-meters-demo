@@ -85,6 +85,12 @@ var a = (function($) {
 		58755790
 	];
 
+	var getCentroid = function (arr) { 
+		return arr.reduce(function (x,y) {
+		    return [x[0] + y[0]/arr.length, x[1] + y[1]/arr.length] 
+		}, [0,0]) 
+	}
+
 	var TimeManager = function(ratio) {
 		this.ratio = ratio;
 		this._time = new Date().getTime();
@@ -123,9 +129,10 @@ var a = (function($) {
 		function parse_building(data) {
 			var tags = data.features[0].properties.tags;
 			// TODO: maybe, set to heatmap not one latlng per building, but all of them?
+			var ll = getCentroid(data.features[0].geometry.coordinates[0]);
 			return {
 				addr: "{0}, {1}".format(tags['addr:street'] || "?", tags['addr:housenumber'] || "?"),
-				latlng: [data.features[0].geometry.coordinates[0][0][1], data.features[0].geometry.coordinates[0][0][0]],
+				latlng: [ll[1], ll[0]],
 				stats: {}
 			};
 		}
@@ -339,6 +346,7 @@ var a = (function($) {
 			var array = [], tmp_array = [];
 			var building;
 			for (var key in DataProvider.data) {
+				debugger
 				building = DataProvider.data[key];
 				tmp_array = building.latlng.slice(0);
 				tmp_array.push(building.stats.overheat);
