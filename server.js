@@ -1,15 +1,16 @@
 var http = require('http');
 var fs = require('fs');
-var index = fs.readFileSync('index.html');
 
 var port = 3300;
 
 http.createServer(function (req, res) {
 	console.log('Requested URL: ' + req.url);
 	if (req.url === '/') {
-		res.writeHead(200);
-		res.write(index);
-		res.end();
+		fs.readFile('index.html', function(e, data) {
+			res.writeHead(200);
+			res.write(data);
+			res.end();
+		});
 	} else {
 		var url = req.url.substring(1);
 		fs.readFile(url, function(e, data) {

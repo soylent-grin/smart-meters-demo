@@ -66,6 +66,8 @@ var a = (function($) {
 		}
 	];
 	*/
+	var MAX_SNAPSHOTS_COUNT = 500;
+
 	// array of OSM IDs
 	var test_data = [
 		132337000,
@@ -81,7 +83,41 @@ var a = (function($) {
 		32895340,
 		76963713,
 		58755790
-	]
+	];
+
+	var TimeManager = function(ratio) {
+		this.ratio = ratio;
+		this._time = new Date().getTime();
+		this.heartbeat = 5000;
+		this.init();
+	};
+	TimeManager.prototype = {
+		constructor: TimeManager,
+		increase: function(value) {
+			this._time += value;
+		},
+		get_time: function() {
+			return this._time;
+		},
+		get_date: function() {
+			return new Date(this._time);
+		},
+		init: function() {
+			this.ticker = setInterval(this.on_tick.bind(this), this.heartbeat);
+			var date = new Date();
+			$('#main-clock').text("{0}:{1}".format(date.getHours(), (date.getMinutes()<10?'0':'') + date.getMinutes()));
+		},
+		on_tick: function() {
+			this.increase(this.ratio * 1000);
+			var date = this.get_date();
+			$('#main-clock').text("{0}:{1}".format(date.getHours(), (date.getMinutes()<10?'0':'') + date.getMinutes()));
+		},
+		stop: function() {
+			clearInterval(this.ticker);
+		}
+	};
+	var time_manager = new TimeManager(60*30);
+
 	var DataProvider = (function() {
 
 		function parse_building(data) {
@@ -92,17 +128,18 @@ var a = (function($) {
 				latlng: [data.features[0].geometry.coordinates[0][0][1], data.features[0].geometry.coordinates[0][0][0]],
 				stats: {}
 			};
-		};
+		}
 
 		var instance = {
 			init: function(callback) {
 				// bla bla bla ajax request, bla bla websockets
 				this.data = test_data;
+				this.snapshots = {};
 				if (callback) {
 					callback(this.data);
 				}
 			},
-			get_extended_info: function(osmb, callback) {				
+			get_extended_info: function(osmb, callback) {
 				// TODO: maybe, get gid of osmb as data provider
 				var that = this;
 				var promises = [];
@@ -134,6 +171,14 @@ var a = (function($) {
 			},
 			update: function(callback) {
 				var building;
+
+				// make a snapshot
+				if (Object.keys(this.snapshots).length > MAX_SNAPSHOTS_COUNT) {
+					delete this.snapshots[Object.keys(this.snapshots)[1]];
+				}
+				this.snapshots[time_manager.get_time()] = this.data;
+
+				// get new data
 				for (var id in this.data) {
 					building = this.data[id];
 					var new_overheat = Math.random();
@@ -145,7 +190,20 @@ var a = (function($) {
 				if (callback) {
 					callback();
 				}
-			} 
+				$('#main-wrapper').trigger('dataUpdated');
+			},
+			get_popup_content: function(id) {
+				var data = this.data[id];
+				var $container = $("<div>");
+				if (data) {
+					$container.append($("<label class='address'>{0}</label>".format(data.addr)));
+					$container.append($("<label>Перетоп: <span>{0}</span></label>".format(data.stats.overheat > 0.5 ? data.stats.overheat.toFixed(2) : "нет")));
+					$container.append($("<label>Температура снаружи, С: <span>{0}</span></label>".format(data.stats.outside_t)));
+					$container.append($("<label>Температура внутри, С: <span>{0}</span></label>".format(data.stats.inside_t)));
+					$container.append($("<label>Текущее потребление: <span>{0}</span></label>".format(data.stats.consumed)));
+				}
+				return $container.html();
+			}
 		};
 
 		return instance;
@@ -153,25 +211,25 @@ var a = (function($) {
 
 	var ColorHelper = {
 		component_to_hex: function(c) {
-		    var hex = c.toString(16);
-		    return hex.length == 1 ? "0" + hex : hex;
+			var hex = c.toString(16);
+			return hex.length == 1 ? "0" + hex : hex;
 		},
 		rgb_to_hex: function(r, g, b) {
-		    return "#" + ColorHelper.component_to_hex(r) + ColorHelper.component_to_hex(g) + ColorHelper.component_to_hex(b);
+			return "#" + ColorHelper.component_to_hex(r) + ColorHelper.component_to_hex(g) + ColorHelper.component_to_hex(b);
 		},
 		hex_to_rgb: function(hex) {
 			// Expand shorthand form (e.g. "03F") to full form (e.g. "0033FF")
-		    var shorthandRegex = /^#?([a-f\d])([a-f\d])([a-f\d])$/i;
-		    hex = hex.replace(shorthandRegex, function(m, r, g, b) {
-		        return r + r + g + g + b + b;
-		    });
+			var shorthandRegex = /^#?([a-f\d])([a-f\d])([a-f\d])$/i;
+			hex = hex.replace(shorthandRegex, function(m, r, g, b) {
+				return r + r + g + g + b + b;
+			});
 
-		    var result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-		    return result ? {
-		        r: parseInt(result[1], 16),
-		        g: parseInt(result[2], 16),
-		        b: parseInt(result[3], 16)
-		    } : null;
+			var result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+			return result ? {
+				r: parseInt(result[1], 16),
+				g: parseInt(result[2], 16),
+				b: parseInt(result[3], 16)
+			} : null;
 		},
 		get_gradient_color: function(color1, color2, percent) {
 			if (typeof(color1) === 'string') {
@@ -182,15 +240,15 @@ var a = (function($) {
 			}
 			var newColor = {};
 
-		    function makeChannel(a, b) {
-		        return(a + Math.round((b-a)*(percent/100)));
-		    }
+			function makeChannel(a, b) {
+				return(a + Math.round((b-a)*(percent/100)));
+			}
 
-		    newColor.r = makeChannel(color1.r, color2.r);
-		    newColor.g = makeChannel(color1.g, color2.g);
-		    newColor.b = makeChannel(color1.b, color2.b);
+			newColor.r = makeChannel(color1.r, color2.r);
+			newColor.g = makeChannel(color1.g, color2.g);
+			newColor.b = makeChannel(color1.b, color2.b);
 
-		    return(ColorHelper.rgb_to_hex(newColor.r, newColor.g, newColor.b));
+			return(ColorHelper.rgb_to_hex(newColor.r, newColor.g, newColor.b));
 		}
 	};
 
@@ -204,7 +262,7 @@ var a = (function($) {
 			this.map = new L.Map('main-map', {
 				center: new L.LatLng(59.996972,29.763898),
 				zoom: 13
-			});			
+			});
 			this.layers = {
 				base: L.tileLayer(
 					'http://{s}.tile.osm.org/{z}/{x}/{y}.png', {
@@ -214,12 +272,12 @@ var a = (function($) {
 
 				heat: L.heatLayer([], {
 					radius: 20,
-					blur: 15, 
+					blur: 15,
 					maxZoom: 13,
 					max: 1
 				}).addTo(this.map),
 				buildings: new OSMBuildings(this.map)
-			};			
+			};
 			this.layers.buildings.each(function(feature) {
 				feature.properties.material = null;
 				feature.properties.roofMaterial = null;
@@ -227,10 +285,10 @@ var a = (function($) {
 					var t = (DataProvider.data[feature.id].stats.inside_t - 50) / 60;
 					var color = ColorHelper.get_gradient_color("#fff5ef", "#ff5200", t * 100);
 					feature.properties.wallColor = color;
-					feature.properties.roofColor = color;					
-				}				
+					feature.properties.roofColor = color;
+				}
 			});
-			this.layers.buildings.load();			
+			this.layers.buildings.load();
 			DataProvider.get_extended_info(this.layers.buildings, callback);
 			this.add_event_listeners();
 			$('.main-toolbar .overheat').click();
@@ -252,6 +310,28 @@ var a = (function($) {
 					$('#main-wrapper').removeClass('overheat');
 					that.map.closePopup();
 					$('.building-item.active').removeClass('active');
+				}
+			});
+			this.layers.buildings.click(function(e) {
+				if (DataProvider.data[e.feature]) {
+					L.popup()
+						.setLatLng(L.latLng(e.lat, e.lon))
+						.setContent(DataProvider.get_popup_content(e.feature))
+						.openOn(that.map);
+					that.current_feature = e.feature;
+				}
+			});
+			$('#main-wrapper').on('dataUpdated', function() {
+				switch($('.main-toolbar .active').attr('data-mode')) {
+					case "temp": 
+						if (that.map._popup) {
+							that.map._popup.setContent(DataProvider.get_popup_content(that.current_feature));
+						}
+					break;
+					case "overheat": 
+					break;
+					default:
+					break;
 				}
 			});
 		},
@@ -276,17 +356,8 @@ var a = (function($) {
 		show_popup: function(data) {
 			L.popup()
 				.setLatLng(data.latlng)
-				.setContent(this.get_popup_content(data))
+				.setContent(DataProvider.get_popup_content(data))
 				.openOn(this.map);
-		},
-		get_popup_content: function(data) {
-			var $container = $("<div>");
-			$container.append($("<label class='address'>{0}</label>".format(data.addr)));
-			$container.append($("<label>Перетоп: <span>{0}</span></label>".format(data.stats.overheat > 0.5 ? data.stats.overheat.toFixed(2) : "нет")));
-			$container.append($("<label>Температура снаружи, С: <span>{0}</span></label>".format(data.stats.outside_t)));
-			$container.append($("<label>Температура внутри, С: <span>{0}</span></label>".format(data.stats.inside_t)));
-			$container.append($("<label>Текущее потребление: <span>{0}</span></label>".format(data.stats.consumed)));
-			return $container.html();
 		}
 	};
 
@@ -302,8 +373,8 @@ var a = (function($) {
 					that.init_aside();
 					DataProvider.update(that.render.bind(that));
 					that.init_polling(3000);
-					that.add_event_listeners();	
-				});			
+					that.add_event_listeners();
+				});
 			});
 		},
 		init_aside: function() {
@@ -338,7 +409,7 @@ var a = (function($) {
 				building = DataProvider.data[key];
 				$el = $('.building-item[data-id="{0}"'.format(key));
 				if ($el.length > 0) {
-					overheat = building.stats.overheat.toFixed(2);	
+					overheat = building.stats.overheat.toFixed(2);
 					if (overheat > 0.5) {
 						$el.find('.overheat').text(overheat);
 						$el.css({
@@ -352,7 +423,7 @@ var a = (function($) {
 				if ($el.hasClass('active')) {
 					$el.click();
 				}
-			};
+			}
 		},
 		render: function() {
 			this.map.update(this.data);
@@ -372,7 +443,5 @@ var a = (function($) {
 			}, heartbeat);
 		}
 	}
-
-	var app = new SmartMetersApp();
-	return app;
+	return new SmartMetersApp();
 })(jQuery);
