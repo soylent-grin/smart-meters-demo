@@ -115,10 +115,9 @@ var a = (function($) {
 		}
 
 		function parse_building(data) {
-			var tags = data.features[0].properties.tags;
-			var ll = getCentroid(data.features[0].geometry.coordinates[0]);
+			var ll = getCentroid(data.geometry.coordinates[0]);
 			return {
-				addr: "{0}, {1}".format(tags['addr:street'] || "?", tags['addr:housenumber'] || "?"),
+				addr: "{0}, {1}".format(data.properties['addr:street'] || "?", data.properties['addr:housenumber'] || "?"),
 				latlng: [ll[1], ll[0]],
 				stats: {},
 				timestamp: (new Date()).getTime()
@@ -133,35 +132,21 @@ var a = (function($) {
 					callback(this.data);
 				}
 			},
-			get_extended_info: function(osmb, callback) {
+			get_extended_info: function(geojson, callback) {
 				// TODO: maybe, get rid of osmb as data provider
-				var that = this;
-				var promises = [];
-
-				this.data.forEach(function(id) {
-					var defer = $.Deferred();
-					osmb.getDetails(id, function(feature) {
-						console.log(feature);
-						that.data[id] = feature;
-						defer.resolve({
-							id: id,
-							feature: feature
-						});
-					});
-					promises.push(defer);
-				});
-
-				$.when.apply($, promises).then(function() {
-					var args = Array.prototype.slice.call(arguments);
-					var new_data = {};
-					args.forEach(function(data) {
-						new_data[data.id] = parse_building(data.feature);
-					});
-					that.data = new_data;
-					if (callback) {
-						callback(that.data);
+				var new_data = {};
+				var tmp_id;
+				geojson.features.forEach(function(feature) {
+					tmp_id = parseInt(feature.id.substring(feature.id.indexOf('/') + 1));
+					if (test_data.indexOf(tmp_id) > -1) {
+						new_data[tmp_id] = parse_building(feature)
 					}
 				});
+				debugger
+				this.data = new_data;
+				if (callback) {
+					callback(this.data);
+				}
 			},
 			update: function(callback) {
 				var building;
@@ -268,20 +253,23 @@ var a = (function($) {
 				}).addTo(this.map),
 				buildings: new OSMBuildings(this.map)
 			};
-			/*
+			
 			this.layers.buildings.each(function(feature) {
 				feature.properties.material = null;
 				feature.properties.roofMaterial = null;
-				if (DataProvider.data[feature.id]) {
-					var t = (DataProvider.data[feature.id].stats.inside_t - 50) / 60;
+				var id = feature.id.substring(feature.id.indexOf('/') + 1);
+				if (DataProvider.data[id]) {
+					var t = (DataProvider.data[id].stats.inside_t - 50) / 60;
 					var color = ColorHelper.get_gradient_color("#fff5ef", "#ff5200", t * 100);
 					feature.properties.wallColor = color;
 					feature.properties.roofColor = color;
 				}
 			});
-*/
-			this.layers.buildings.loadData();
-			DataProvider.get_extended_info(this.layers.buildings, callback);
+
+			$.getJSON('buildings.geojson', function(data) {
+				that.layers.buildings.set(data);
+				DataProvider.get_extended_info(data, callback);
+			}.bind(this));
 			this.add_event_listeners();
 			$('.main-toolbar .overheat').click();
 		},
@@ -364,7 +352,7 @@ var a = (function($) {
 					that.init_polling(3000);
 					that.add_event_listeners();
 				});
-				that.timeline = new Timeline();
+				//that.timeline = new Timeline();
 			});
 		},
 		init_aside: function() {
