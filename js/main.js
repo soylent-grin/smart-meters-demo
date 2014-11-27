@@ -6,66 +6,8 @@ var a = (function($) {
 		var pattern = /\{\d+\}/g;
 		var args = arguments;
 		return this.replace(pattern, function(capture){ return args[capture.match(/\d+/)]; });
-	};/*
-	var test_data = [
-		{
-			lat_lng: [59.986840,29.781766],
-			overheat: 0.5,
-			outside_t: 6,
-			inside_t: 80,
-			consumed: 100
-		},
-		{
-			lat_lng: [59.989259,29.791500],
-			overheat: 0.5,
-			outside_t: 6,
-			inside_t: 80,
-			consumed: 100
-		},
-		{
-			lat_lng: [59.990384,29.789364],
-			overheat: 0.5,
-			outside_t: 6,
-			inside_t: 80,
-			consumed: 100
-		},
-		{
-			lat_lng: [59.990169,29.786172],
-			overheat: 0.5,
-			outside_t: 6,
-			inside_t: 80,
-			consumed: 100
-		},
-		{
-			lat_lng: [59.990760,29.780937],
-			overheat: 0.5,
-			outside_t: 6,
-			inside_t: 80,
-			consumed: 100
-		},
-		{
-			lat_lng: [59.988890,29.785052],
-			overheat: 0.5,
-			outside_t: 6,
-			inside_t: 80,
-			consumed: 100
-		},
-		{
-			lat_lng: [59.987449,29.784129],
-			overheat: 0.5,
-			outside_t: 6,
-			inside_t: 80,
-			consumed: 100
-		},
-		{
-			lat_lng: [59.988965,29.792154],
-			overheat: 0.5,
-			outside_t: 6,
-			inside_t: 80,
-			consumed: 100
-		}
-	];
-	*/
+	};
+
 	var MAX_SNAPSHOTS_COUNT = 500;
 
 	// array of OSM IDs
@@ -84,137 +26,6 @@ var a = (function($) {
 		76963713,
 		58755790
 	];
-
-	var getCentroid = function (arr) { 
-		return arr.reduce(function (x,y) {
-		    return [x[0] + y[0]/arr.length, x[1] + y[1]/arr.length] 
-		}, [0,0]) 
-	}
-
-	var TimeManager = function(ratio) {
-		this.ratio = ratio;
-		this._time = new Date().getTime();
-		this.heartbeat = 5000;
-		this.init();
-	};
-	TimeManager.prototype = {
-		constructor: TimeManager,
-		increase: function(value) {
-			this._time += value;
-		},
-		get_time: function() {
-			return this._time;
-		},
-		get_date: function() {
-			return new Date(this._time);
-		},
-		init: function() {
-			this.ticker = setInterval(this.on_tick.bind(this), this.heartbeat);
-			var date = new Date();
-			$('#main-clock').text("{0}:{1}".format(date.getHours(), (date.getMinutes()<10?'0':'') + date.getMinutes()));
-		},
-		on_tick: function() {
-			this.increase(this.ratio * 1000);
-			var date = this.get_date();
-			$('#main-clock').text("{0}:{1}".format(date.getHours(), (date.getMinutes()<10?'0':'') + date.getMinutes()));
-		},
-		stop: function() {
-			clearInterval(this.ticker);
-		}
-	};
-	var time_manager = new TimeManager(60*30);
-
-	var DataProvider = (function() {
-
-		function parse_building(data) {
-			var tags = data.features[0].properties.tags;
-			// TODO: maybe, set to heatmap not one latlng per building, but all of them?
-			var ll = getCentroid(data.features[0].geometry.coordinates[0]);
-			return {
-				addr: "{0}, {1}".format(tags['addr:street'] || "?", tags['addr:housenumber'] || "?"),
-				latlng: [ll[1], ll[0]],
-				stats: {}
-			};
-		}
-
-		var instance = {
-			init: function(callback) {
-				// bla bla bla ajax request, bla bla websockets
-				this.data = test_data;
-				this.snapshots = {};
-				if (callback) {
-					callback(this.data);
-				}
-			},
-			get_extended_info: function(osmb, callback) {
-				// TODO: maybe, get gid of osmb as data provider
-				var that = this;
-				var promises = [];
-
-				this.data.forEach(function(id) {
-					var defer = $.Deferred();
-					osmb.getDetails(id, function(feature) {
-						console.log(feature);
-						that.data[id] = feature;
-						defer.resolve({
-							id: id,
-							feature: feature
-						});
-					});
-					promises.push(defer);
-				});
-
-				$.when.apply($, promises).then(function() {
-					var args = Array.prototype.slice.call(arguments);
-					var new_data = {};
-					args.forEach(function(data) {
-						new_data[data.id] = parse_building(data.feature);
-					});
-					that.data = new_data;
-					if (callback) {
-						callback(that.data);
-					}
-				});
-			},
-			update: function(callback) {
-				var building;
-
-				// make a snapshot
-				if (Object.keys(this.snapshots).length > MAX_SNAPSHOTS_COUNT) {
-					delete this.snapshots[Object.keys(this.snapshots)[1]];
-				}
-				this.snapshots[time_manager.get_time()] = this.data;
-
-				// get new data
-				for (var id in this.data) {
-					building = this.data[id];
-					var new_overheat = Math.random();
-					building.stats.overheat = new_overheat ;//< building.overheat ?  building.overheat : new_overheat;
-					building.stats.inside_t = Math.floor(Math.random() * 60) + 50;
-					building.stats.outside_t = Math.floor(Math.random() * 2 - 4 );
-					building.stats.consumed =  Math.floor(Math.random() * 5);
-				}
-				if (callback) {
-					callback();
-				}
-				$('#main-wrapper').trigger('dataUpdated');
-			},
-			get_popup_content: function(id) {
-				var data = this.data[id];
-				var $container = $("<div>");
-				if (data) {
-					$container.append($("<label class='address'>{0}</label>".format(data.addr)));
-					$container.append($("<label>Перетоп: <span>{0}</span></label>".format(data.stats.overheat > 0.5 ? data.stats.overheat.toFixed(2) : "нет")));
-					$container.append($("<label>Температура снаружи, С: <span>{0}</span></label>".format(data.stats.outside_t)));
-					$container.append($("<label>Температура внутри, С: <span>{0}</span></label>".format(data.stats.inside_t)));
-					$container.append($("<label>Текущее потребление: <span>{0}</span></label>".format(data.stats.consumed)));
-				}
-				return $container.html();
-			}
-		};
-
-		return instance;
-	})();
 
 	var ColorHelper = {
 		component_to_hex: function(c) {
@@ -259,6 +70,178 @@ var a = (function($) {
 		}
 	};
 
+	// custom clock (5 sec = 30 min if ratio is 60 * 30)
+	var TimeManager = function(ratio) {
+		this.ratio = ratio;
+		this._time = new Date().getTime();
+		this.heartbeat = 5000;
+		this.init();
+	};
+	TimeManager.prototype = {
+		constructor: TimeManager,
+		increase: function(value) {
+			this._time += value;
+		},
+		get_time: function() {
+			return this._time;
+		},
+		get_date: function() {
+			return new Date(this._time);
+		},
+		init: function() {
+			this.ticker = setInterval(this.on_tick.bind(this), this.heartbeat);
+			var date = new Date();
+			$('#main-clock').text("{0}:{1}".format(date.getHours(), (date.getMinutes()<10?'0':'') + date.getMinutes()));
+		},
+		on_tick: function() {
+			this.increase(this.ratio * 1000);
+			var date = this.get_date();
+			$('#main-clock').text("{0}:{1}".format(date.getHours(), (date.getMinutes()<10?'0':'') + date.getMinutes()));
+		},
+		stop: function() {
+			clearInterval(this.ticker);
+		}
+	};
+	var TIME_MANAGER = new TimeManager(60*30);
+
+	// common data aggregator to share
+	var DataProvider = (function() {
+
+
+		function getCentroid(arr) { 
+			return arr.reduce(function (x,y) {
+			    return [x[0] + y[0]/arr.length, x[1] + y[1]/arr.length];
+			}, [0,0]);
+		}
+
+		function parse_building(data) {
+			var tags = data.features[0].properties.tags;
+			var ll = getCentroid(data.features[0].geometry.coordinates[0]);
+			return {
+				addr: "{0}, {1}".format(tags['addr:street'] || "?", tags['addr:housenumber'] || "?"),
+				latlng: [ll[1], ll[0]],
+				stats: {},
+				timestamp: (new Date()).getTime()
+			};
+		}
+
+		var instance = {
+			init: function(callback) {
+				this.data = test_data;
+				this.snapshots = {};
+				if (callback) {
+					callback(this.data);
+				}
+			},
+			get_extended_info: function(osmb, callback) {
+				// TODO: maybe, get rid of osmb as data provider
+				var that = this;
+				var promises = [];
+
+				this.data.forEach(function(id) {
+					var defer = $.Deferred();
+					osmb.getDetails(id, function(feature) {
+						console.log(feature);
+						that.data[id] = feature;
+						defer.resolve({
+							id: id,
+							feature: feature
+						});
+					});
+					promises.push(defer);
+				});
+
+				$.when.apply($, promises).then(function() {
+					var args = Array.prototype.slice.call(arguments);
+					var new_data = {};
+					args.forEach(function(data) {
+						new_data[data.id] = parse_building(data.feature);
+					});
+					that.data = new_data;
+					if (callback) {
+						callback(that.data);
+					}
+				});
+			},
+			update: function(callback) {
+				var building;
+
+				// make a snapshot
+				if (Object.keys(this.snapshots).length > MAX_SNAPSHOTS_COUNT) {
+					delete this.snapshots[Object.keys(this.snapshots)[0]];
+				}
+				var time = TIME_MANAGER.get_time();
+				this.snapshots[time] = this.data;
+
+				// get new data
+				for (var id in this.data) {
+					building = this.data[id];
+					var new_overheat = Math.random();
+					building.stats.overheat = new_overheat ;//< building.overheat ?  building.overheat : new_overheat;
+					building.stats.inside_t = Math.floor(Math.random() * 60) + 50;
+					building.stats.outside_t = Math.floor(Math.random() * 2 - 4 );
+					building.stats.consumed =  Math.floor(Math.random() * 5);
+					building.timestamp = time;
+				}
+				if (callback) {
+					callback();
+				}
+				$('#main-wrapper').trigger('dataUpdated');
+			},
+			get_popup_content: function(id) {
+				var data = this.data[id];
+				var $container = $("<div>");
+				if (data) {
+					$container.append($("<label class='address'>{0}</label>".format(data.addr)));
+					$container.append($("<label>Перетоп: <span>{0}</span></label>".format(data.stats.overheat > 0.5 ? data.stats.overheat.toFixed(2) : "нет")));
+					$container.append($("<label>Температура снаружи, С: <span>{0}</span></label>".format(data.stats.outside_t)));
+					$container.append($("<label>Температура внутри, С: <span>{0}</span></label>".format(data.stats.inside_t)));
+					$container.append($("<label>Текущее потребление: <span>{0}</span></label>".format(data.stats.consumed)));
+				}
+				return $container.html();
+			}
+		};
+		return instance;
+	})();
+
+	var Timeline = function() {
+		this.el = document.getElementById('main-timeline');
+		this.options = {
+			maxHeight: "200px",
+			dataAttributes: ['feature']
+			//locale: 'ru'
+		};
+		this._data = new vis.DataSet();
+		this._instance = new vis.Timeline(this.el, this._data, this.options);
+		this._instance.setItems(this._data);
+	};
+	Timeline.prototype = {
+		update: function(data) {
+			var timestamp;
+			for (var id in data) {
+				timestamp =  data[id].timestamp ? data[id].timestamp : (new Date()).getTime();
+				if (data[id].stats.overheat > 0.5) {
+					this._data.add({
+						id: "{0}_{1}".format(id, timestamp),
+						content: "{0}, {1}".format(data[id].addr, data[id].stats.overheat),
+						start: new Date(timestamp),
+						feature: id
+					});
+				}
+			}
+			this._instance.fit();
+		},
+		add_event_listeners: function() {
+			var that = this;
+			$('#main-wrapper').on('dataUpdated', function(e) {
+				that.update(DataProvider.data);
+			});
+			this._instance.on('select', function(items) {
+
+			});
+		}
+	};
+
 	var SmartMetersMap = function(callback) {
 		this.init(callback);
 	};
@@ -285,6 +268,7 @@ var a = (function($) {
 				}).addTo(this.map),
 				buildings: new OSMBuildings(this.map)
 			};
+			/*
 			this.layers.buildings.each(function(feature) {
 				feature.properties.material = null;
 				feature.properties.roofMaterial = null;
@@ -295,7 +279,8 @@ var a = (function($) {
 					feature.properties.roofColor = color;
 				}
 			});
-			this.layers.buildings.load();
+*/
+			this.layers.buildings.loadData();
 			DataProvider.get_extended_info(this.layers.buildings, callback);
 			this.add_event_listeners();
 			$('.main-toolbar .overheat').click();
@@ -321,11 +306,7 @@ var a = (function($) {
 			});
 			this.layers.buildings.click(function(e) {
 				if (DataProvider.data[e.feature]) {
-					L.popup()
-						.setLatLng(L.latLng(e.lat, e.lon))
-						.setContent(DataProvider.get_popup_content(e.feature))
-						.openOn(that.map);
-					that.current_feature = e.feature;
+					that.show_popup(e.feature);
 				}
 			});
 			$('#main-wrapper').on('dataUpdated', function() {
@@ -342,11 +323,17 @@ var a = (function($) {
 				}
 			});
 		},
+		show_popup: function(id) {
+			L.popup()
+				.setLatLng(L.latLng(e.lat, e.lon))
+				.setContent(DataProvider.get_popup_content(id))
+				.openOn(that.map);
+			that.current_feature = id;
+		},
 		update: function() {
 			var array = [], tmp_array = [];
 			var building;
 			for (var key in DataProvider.data) {
-				debugger
 				building = DataProvider.data[key];
 				tmp_array = building.latlng.slice(0);
 				tmp_array.push(building.stats.overheat);
@@ -360,12 +347,6 @@ var a = (function($) {
 		},
 		set_view: function(lat_lng) {
 			this.map.setView(lat_lng);
-		},
-		show_popup: function(data) {
-			L.popup()
-				.setLatLng(data.latlng)
-				.setContent(DataProvider.get_popup_content(data))
-				.openOn(this.map);
 		}
 	};
 
@@ -383,6 +364,7 @@ var a = (function($) {
 					that.init_polling(3000);
 					that.add_event_listeners();
 				});
+				that.timeline = new Timeline();
 			});
 		},
 		init_aside: function() {
@@ -436,13 +418,6 @@ var a = (function($) {
 		render: function() {
 			this.map.update(this.data);
 			this.update_aside(this.data);
-		},
-		get_data: function(callback) {
-			var that = this;
-
-			// tons of code
-
-			callback.call(this, test_data);
 		},
 		init_polling: function(heartbeat) {
 			var that = this;

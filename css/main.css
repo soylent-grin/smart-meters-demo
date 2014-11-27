@@ -105,25 +105,19 @@ label > span {
 
 #main-timeline {
 	position: absolute;
-	bottom: 30px;
-	width: 40%;
-	margin: 0 30%;
+	background-color: rgba(255,255,255,.7);
+	bottom: 20px;
+	width: 50%;
+	margin: 0 25%;
 }
 
-input[type=range] {  
-    -webkit-appearance: none;  
-    width: 100%;  
-    border-radius: 8px;  
-    height: 7px;  
-    border: 1px solid #bdc3c7;  
-    background-color: #fff;   
-}  
-input[type='range']::-webkit-slider-thumb {
-	-webkit-appearance: none;
-	background-color: #ecf0f1;
-	border: 1px solid #bdc3c7;
-	width: 20px;
-	height: 20px;
-	border-radius: 10px;
+.vis.timeline .item {
+	position: absolute;
+	color: #D71616;
+	border-color: #F89797;
+	border-width: 1px;
+	background-color: #FFD2D2;
+	display: inline-block;
+	padding: 5px;
 	cursor: pointer;
 }
