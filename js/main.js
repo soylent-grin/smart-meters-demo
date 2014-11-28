@@ -107,7 +107,6 @@ var a = (function($) {
 	// common data aggregator to share
 	var DataProvider = (function() {
 
-
 		function getCentroid(arr) { 
 			return arr.reduce(function (x,y) {
 			    return [x[0] + y[0]/arr.length, x[1] + y[1]/arr.length];
@@ -142,7 +141,6 @@ var a = (function($) {
 						new_data[tmp_id] = parse_building(feature)
 					}
 				});
-				debugger
 				this.data = new_data;
 				if (callback) {
 					callback(this.data);
@@ -178,7 +176,7 @@ var a = (function($) {
 				var $container = $("<div>");
 				if (data) {
 					$container.append($("<label class='address'>{0}</label>".format(data.addr)));
-					$container.append($("<label>Перетоп: <span>{0}</span></label>".format(data.stats.overheat > 0.5 ? data.stats.overheat.toFixed(2) : "нет")));
+					$container.append($("<label>Перетоп: <span>{0}</span></label>".format(data.stats.overheat > 0.97 ? data.stats.overheat.toFixed(2) : "нет")));
 					$container.append($("<label>Температура снаружи, С: <span>{0}</span></label>".format(data.stats.outside_t)));
 					$container.append($("<label>Температура внутри, С: <span>{0}</span></label>".format(data.stats.inside_t)));
 					$container.append($("<label>Текущее потребление: <span>{0}</span></label>".format(data.stats.consumed)));
@@ -199,30 +197,33 @@ var a = (function($) {
 		this._data = new vis.DataSet();
 		this._instance = new vis.Timeline(this.el, this._data, this.options);
 		this._instance.setItems(this._data);
+		this.add_event_listeners();
 	};
 	Timeline.prototype = {
 		update: function(data) {
 			var timestamp;
 			for (var id in data) {
 				timestamp =  data[id].timestamp ? data[id].timestamp : (new Date()).getTime();
-				if (data[id].stats.overheat > 0.5) {
+				if (data[id].stats.overheat > 0.97) {
 					this._data.add({
 						id: "{0}_{1}".format(id, timestamp),
-						content: "{0}, {1}".format(data[id].addr, data[id].stats.overheat),
+						content: "{0}, {1}".format(data[id].addr, data[id].stats.overheat.toFixed(2)),
 						start: new Date(timestamp),
 						feature: id
 					});
 				}
 			}
-			this._instance.fit();
+			this._instance.moveTo(TIME_MANAGER.get_date());
+			this._instance.setCurrentTime(TIME_MANAGER.get_date());
 		},
 		add_event_listeners: function() {
 			var that = this;
 			$('#main-wrapper').on('dataUpdated', function(e) {
 				that.update(DataProvider.data);
 			});
-			this._instance.on('select', function(items) {
-
+			this._instance.on('select', function(e) {
+				var id = e.items[0].substring(0, e.items[0].indexOf('_'));
+				$('#main-wrapper').trigger('itemSelected', id);
 			});
 		}
 	};
@@ -293,9 +294,7 @@ var a = (function($) {
 				}
 			});
 			this.layers.buildings.click(function(e) {
-				if (DataProvider.data[e.feature]) {
-					that.show_popup(e.feature);
-				}
+				that.show_popup(e.feature.substring(e.feature.indexOf('/') + 1));
 			});
 			$('#main-wrapper').on('dataUpdated', function() {
 				switch($('.main-toolbar .active').attr('data-mode')) {
@@ -310,13 +309,22 @@ var a = (function($) {
 					break;
 				}
 			});
+			$('#main-wrapper').on('itemSelected', function(e, id) {
+				$('.building-item.active').removeClass('active');
+				that.current_feature = id;
+				that.show_popup(id);
+			});
 		},
 		show_popup: function(id) {
-			L.popup()
-				.setLatLng(L.latLng(e.lat, e.lon))
-				.setContent(DataProvider.get_popup_content(id))
-				.openOn(that.map);
-			that.current_feature = id;
+			var data = DataProvider.data[id];
+			if (data) {
+				L.popup()
+					.setLatLng(L.latLng(data.latlng))
+					.setContent(DataProvider.get_popup_content(id))
+					.openOn(this.map);
+				this.current_feature = id;
+				this.map.setView(data.latlng);
+			}
 		},
 		update: function() {
 			var array = [], tmp_array = [];
@@ -352,7 +360,7 @@ var a = (function($) {
 					that.init_polling(3000);
 					that.add_event_listeners();
 				});
-				//that.timeline = new Timeline();
+				that.timeline = new Timeline();
 			});
 		},
 		init_aside: function() {
@@ -376,7 +384,7 @@ var a = (function($) {
 			var that = this;
 			$('#overheat-info').on('click', '.building-item', function() {
 				$(this).addClass('active').siblings('.active').removeClass('active');
-				that.map.show_popup(DataProvider.data[$(this).attr('data-id')]);
+				that.map.show_popup($(this).attr('data-id'));
 			});
 		},
 		update_aside: function(data) {
@@ -385,10 +393,10 @@ var a = (function($) {
 			var building;
 			for (var key in DataProvider.data) {
 				building = DataProvider.data[key];
-				$el = $('.building-item[data-id="{0}"'.format(key));
+				$el = $('.building-item[data-id="{0}"]'.format(key));
 				if ($el.length > 0) {
 					overheat = building.stats.overheat.toFixed(2);
-					if (overheat > 0.5) {
+					if (overheat > 0.97) {
 						$el.find('.overheat').text(overheat);
 						$el.css({
 							'background-color': 'rgba(255,0,0,{0})'.format(overheat * 0.25)
